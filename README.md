@@ -13,7 +13,7 @@ DeepSeek Harness（DSH）侧栏底部的**账户余额与花费卡片**：常驻
 - **成本估算**：最近一次提问 / 今日·本会话 / 今日·本工作区 / 今日·所有工作区
 - **峰谷状态**：按北京时间工作日 09:00–12:00、14:00–18:00 判峰，含中国法定节假日表
 - **官方价格自动同步**：启动时 + 每 12 小时抓取官方定价页，失败回退内置价表
-- **模型工具**：`deepseek_billing`，可直接问模型「余额多少 / 今天花了多少」
+- **模型工具**：`account_balance`，可直接问模型「余额多少 / 今天花了多少」
 - 卡片每 60 秒自动刷新；点开弹层立即强刷
 
 ## 安装
@@ -56,7 +56,7 @@ lib/index.js          宿主半（Node）
   ├ 5 条 HTTP 路由      /api/account-balance/{balance,active-cost,today-cost,last-cost,cost}
   ├ 会话日志解析        遍历 ~/.dsh/sessions/ 算 token 与费用
   ├ 余额读取            账号服务 deepseekAccount → 回退凭据服务 + /user/balance
-  └ 模型工具            deepseek_billing
+  └ 模型工具            account_balance
 lib/client.js         浏览器半（React）
   ├ 注入槽位            ctx.slots.inject("sidebar.footer.action")
   ├ 自注入 CSS          <style data-plugin="account-balance" data-plugin-css="account-balance/styles.css">
@@ -76,6 +76,7 @@ package.json          的 dsh 字段：bundle.patch + client.platform = "web"
 | 金额排版 | `moneyNodes()` 用正则按第一个数字把金额拆成「符号 / 整数段 / 小数段」，分别套 `.dshbw_sym`/`.dshbw_int`/`.dshbw_dec`；`line-height:1` 保证不影响卡片高度 |
 | 卡片标签 | `.dshbw_brand`（全称）与 `.dshbw_brandMini`（侧栏收起成 36px 图标时显示），靠 `[data-compact="true"]` 切换 |
 | 与其它卡片共存 | `sidebar.footer.action` 是**不换行**的 flex 行，多张"占满一行"的卡片会被压成半行。**注意卡片与那一行之间还有一层 DSH 槽位出口容器，它是 `display: contents`（不生成盒子），却正是 `el.parentElement`——往它上面写 `flex-wrap` 完全无效**，必须从卡片向上爬到最近的 computed `display: flex` 祖先再写。本卡片根元素为 `flex: 1 1 100%`；换行在**那一行元素上做引用计数**（属性名 `__dshBalanceCardWrap`，是与 Liaobots 插件约定的跨插件契约）：首个声明者记录原值并打开换行，最后一个离开的还原。因此任意数量的卡片共用一行都不抢，卸载顺序也不会压扁仍在挂载的邻居。改这块务必同时守住"爬到 flex 祖先"和这个契约 |
+| 客户端模块 id | `lib/client.js` 里 `window.__ModuleLoader__.load({ id })` 的 id **必须等于 `package.json` 的包名**（`@lithane/dsh-account-balance`）。DSH 的客户端模块表按包名索引：实测 harness 自带的 68 个客户端模块、以及能正常工作的 `dsh-balance-widget`、`dsh-liaobots-balance`，id 全部等于各自包名。写成别的值（如 0.1.1 的 `account-balance`）时 bundle 仍会被加载，但槽位永远不会挂载——**卡片静默消失，没有任何报错，日志里也看不到** |
 
 ## 开发
 
@@ -141,7 +142,9 @@ npm publish --access public                         # scoped 包必须带 --acce
 本仓库基于其 **0.6.3**。原始版权归原作者，[LICENSE](LICENSE) 保留上游版权行并追加本 fork 的版权行；
 上游完整文档（含配置项、定价说明、历史版本）见 [docs/upstream/](docs/upstream/README.md)。
 
-两版可共存（路由与全部标识已改名），但会同时往同一个侧栏槽位注入卡片，视觉上重复，不建议同时启用。
+两版可共存（HTTP 路由、模型工具名与全部 UI 标识均已改名），但会同时往同一个侧栏槽位注入两张外观相同的卡片，视觉上重复，不建议同时启用。
+
+> ⚠️ **0.1.1 及更早版本不可与上游同时启用**：那时的模型工具仍叫 `deepseek_billing`，与上游重名会让 DSH 在组装工具声明时抛 `Duplicate tool declaration name`。0.1.2 起改名为 `account_balance` 后此冲突消失。
 
 ## License
 

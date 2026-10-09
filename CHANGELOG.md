@@ -5,6 +5,22 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.2] - 2026-10-09
+
+### 修复
+
+- **与上游 `dsh-balance-widget` 同时启用时直接报错**。模型工具名沿用了上游的
+  `deepseek_billing` 而没有改名，而 DSH 在组装工具声明时对重名是**硬报错**
+  （`Duplicate tool declaration name: deepseek_billing`），所以 0.1.1 说的
+  "两版可共存"并不成立。现改名为 **`account_balance`**，两版并存不再冲突
+  （剩下的只是同一个槽位里两张外观相同的卡片）。
+- **从 GitHub 安装后卡片不出现**。客户端模块 id 写的是 `account-balance`，而包名是
+  `@lithane/dsh-account-balance`。DSH 的客户端模块表按**包名**索引——实测 harness 自带的
+  68 个客户端模块、以及能正常工作的 `dsh-balance-widget`、`dsh-liaobots-balance`，
+  其 `window.__ModuleLoader__.load({ id })` 全部等于各自包名。id 与包名不一致时
+  bundle 能被加载，但槽位不会挂载，卡片**静默消失**（不报错、日志也看不到）。
+  现把 id 对齐为包名。
+
 ## [0.1.1] - 2026-10-09
 
 ### 变更

@@ -5,6 +5,16 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)，版本号遵循 [语义化版本](https://semver.org/lang/zh-CN/)。
 
+## [0.1.3] - 2026-10-09
+
+### 修复
+
+- **`account_balance` 工具从未注册成功（死代码）**。注册时按属性读 `ctx.tools`，而本插件的
+  `inject` 只有 `webServer`，Cordis 对未声明服务抛
+  `cannot get property "tools" without inject`；该错误又被同一处 try/catch 吞成一条 warn，
+  所以工具长期静默缺失。现改为 `ctx.get("tools")`（与 `dsh-tool-ask-user`、
+  `dsh-liaobots-balance` 一致），tools 服务不存在时照旧跳过。
+
 ## [0.1.2] - 2026-10-09
 
 ### 修复

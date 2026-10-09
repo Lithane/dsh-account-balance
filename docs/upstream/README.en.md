@@ -1,0 +1,290 @@
+# dsh-balance-widget
+
+[中文](https://github.com/LL-cmyk-so/dsh-balance-widget/blob/main/README.md) | **English**
+
+[![npm](https://img.shields.io/npm/v/dsh-balance-widget?style=flat-square&label=npm)](https://www.npmjs.com/package/dsh-balance-widget)
+[![Stars](https://img.shields.io/github/stars/LL-cmyk-so/dsh-balance-widget?style=flat-square&label=Stars)](https://github.com/LL-cmyk-so/dsh-balance-widget)
+[![License](https://img.shields.io/github/license/LL-cmyk-so/dsh-balance-widget?style=flat-square)](https://github.com/LL-cmyk-so/dsh-balance-widget/blob/main/LICENSE)
+[![Last commit](https://img.shields.io/github/last-commit/LL-cmyk-so/dsh-balance-widget?style=flat-square)](https://github.com/LL-cmyk-so/dsh-balance-widget)
+[![Node 24](https://img.shields.io/badge/Node%2024-ready-brightgreen?style=flat-square)](https://nodejs.org)
+[![Zero deps](https://img.shields.io/badge/dependencies-zero-brightgreen?style=flat-square)]()
+
+A balance & cost widget for the [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) (DSH) **Web GUI and desktop app**: a persistent sidebar footer card shows the account balance and today's cost; clicking opens a five-tier cost breakdown (balance / last prompt with its session name / today-this-session / today-this-workspace / today-all-workspaces).
+
+## Preview
+
+| Sidebar card | Five-tier cost popover |
+| --- | --- |
+| ![Sidebar card](https://raw.githubusercontent.com/LL-cmyk-so/dsh-balance-widget/main/docs/screenshot-corner.png) | ![Cost popover](https://raw.githubusercontent.com/LL-cmyk-so/dsh-balance-widget/main/docs/screenshot-popover.png) |
+
+## How it differs from similar plugins
+
+| Aspect | This plugin | Others (dsh-balance / dsh-token-price / ...) |
+| --- | --- | --- |
+| **Zero external dependencies** | ✅ Imports no `@deepseek-ai/*` packages, no native modules | ❌ Most depend on dsh SDK packages |
+| **Node 24 ready** | ✅ Works out of the box on any profile layout | ⚠️ Many community plugins still error on Node 24 |
+| **Boot stability** | ✅ Registers routes via official `ctx.webServer`; never conflicts with apiproxy | ⚠️ Some self-host HTTP servers that crash `dsh web` on boot |
+| **Always-fresh auto refresh** | ✅ Sidebar card refreshes balance & costs every 60s; opening the popover triggers an immediate refresh | Some always-on badges refresh on a timer |
+| **Peak/off-peak pricing** | ✅ Built-in official 2026-09-10 rate table, re-synced from the official page at startup and every 12h | Partial support |
+| **Security** | ✅ API key stays in the host process; loopback-only guard | Varies |
+
+**In one line**: *The zero-dependency, Node 24-ready balance/cost widget that never breaks `dsh web` or the desktop app on boot.*
+
+## Features
+
+- **Account balance** — The balance comes from the host account service `deepseekAccount`, provided by `@deepseek-ai/dsh-deepseek-account-platform` — the official "Settings → Account & balance" page's own source, so both surfaces show the same number and **no API key is needed**; unsigned hosts and older runtimes (0.1.x) fall back to DeepSeek's official `GET /user/balance`. The `¥` balance is color-coded by threshold (healthy / amber below `lowThreshold` / red below `criticalThreshold`). The API key is resolved through the host credentials service and never leaves the host process; the browser only talks to same-origin routes.
+- **Last prompt cost (estimate)** — Parses the most recent session file and prices the last turn's token usage, answering "how much did that last prompt cost", with the **session name** labeled underneath.
+- **Today · this session cost (estimate)** — The current session's usage today (calendar day) × DeepSeek's official peak/off-peak price table. Follows the configured model (default `deepseek-v4-flash`, switchable to `deepseek-v4-pro`) and the Beijing-time peak/off-peak windows automatically.
+- **Today · this workspace cost (estimate)** — Sums today's token usage × price across every session in the current workspace (anchored by the current session).
+- **Today · all workspaces cost (estimate)** — Walks every session under `~/.dsh/sessions/` and sums today's (calendar day) token usage × price.
+- **Peak/off-peak status** — a status dot before the card's amount is tinted by the current window (amber at peak / green at off-peak), a "Peak/Off-peak" tag sits next to the popover title, and hovering it shows the current price tier (input/output per 1M tokens).
+- **Token usage** — Also shows the session's input (incl. cache hits) / output tokens.
+- **One-click top-up** — a "Top up" link in the popover footer jumps to the official DeepSeek top-up page (platform.deepseek.com/top_up) in a new tab.
+- **Sidebar card** — a persistent card at the sidebar footer shows balance and today's cost; globally visible, auto-refreshes every 60s (balance via the official API, costs parsed locally), and opening the popover triggers an immediate refresh.
+- **Balance color warning** — the balance number is tinted in three tiers: default (healthy) → amber (below `lowThreshold`) → red (below `criticalThreshold`).
+- **Official price auto-sync** — fetches the DeepSeek official pricing page on startup and every 12h; falls back to built-in rates on failure.
+- **Agent tool** — a `deepseek_billing` tool lets the model answer "how much balance do I have / how much did today cost".
+
+## Why this plugin
+
+- **Zero external dependencies** — the host half imports no `@deepseek-ai/*` packages and no native modules, so it loads from any profile layout and works on **Node 24** (many community cordis plugins still lag on Node 24).
+- **Uses official APIs only** — routes are registered through `ctx.webServer` (the same seam `dsh-ssh` uses) with loopback-only guards; no conflicting custom HTTP servers.
+
+## Architecture
+
+```
+host half (lib/index.js)
+  ctx.webServer.register:
+    GET /api/dsh-balance/balance     → official /user/balance (loopback-only guard)
+    GET /api/dsh-balance/active-cost → last prompt + today-this-session (with session name, most recent session)
+    GET /api/dsh-balance/today-cost  → today's costs (dual: current workspace + all workspaces)
+  Zero @deepseek-ai/* imports; loads from any profile layout.
+  Also registers a deepseek_billing tool for model-driven queries.
+
+client half (lib/client.js)
+  ctx.slots.inject("sidebar.footer.action")
+    → persistent sidebar footer card (balance + today's cost, peak/off-peak status dot; a 36×36 icon button while the sidebar is collapsed)
+    → click opens five-tier cost popover + peak tag + ⓘ term explanations
+```
+
+## Installation
+
+From npm (once published):
+
+```sh
+dsh plugin --profile web add dsh-balance-widget
+```
+
+From GitHub (development):
+
+```sh
+git clone https://github.com/LL-cmyk-so/dsh-balance-widget.git
+cd dsh-balance-widget
+dsh plugin --profile web add "link:$(pwd)"
+```
+
+Then restart `dsh web`.
+
+**The desktop app (DeepSeek Harness.app) is supported too**, with `desktop` as the install target: install it from the desktop app's sidebar "Plugins" panel, or add the package to `~/.dsh/profiles/desktop/package.json` (dependency plus `dsh.profile.bundles`), then restart the desktop app. Because the desktop app is launched by the GUI, note that this plugin shells out to nothing — there is no PATH to configure.
+
+## Configuration
+
+### Where the config file lives
+
+DSH plugin configuration lives in:
+
+```
+~/.dsh/profiles/web/cordis.patch.yml
+```
+
+### All options
+
+Append to `cordis.patch.yml` (only change the lines you need; the rest stay at defaults):
+
+```yaml
+- id: balance-widget
+  name: dsh-balance-widget
+  config:
+    balanceBaseURL: https://api.deepseek.com   # official balance endpoint (rarely changed)
+    balanceApiKeyEnv: DEEPSEEK_API_KEY          # credential ref for the API key (rarely changed)
+    requestTimeoutMs: 5000                      # balance request timeout (ms)
+    modelId: deepseek-v4-flash                  # pricing model (or deepseek-v4-pro)
+    lowThreshold: 5                             # balance below this (¥) turns the icon amber
+    criticalThreshold: 1                        # balance below this (¥) turns the icon red
+```
+
+### Example: custom balance thresholds
+
+By default the icon turns **amber below ¥5 and red below ¥1**. To warn at ¥10 / ¥3 instead:
+
+```yaml
+- id: balance-widget
+  name: dsh-balance-widget
+  config:
+    lowThreshold: 10
+    criticalThreshold: 3
+```
+
+Restart `dsh web` for changes to take effect.
+
+### Example: price with V4-Pro
+
+If you mainly use DeepSeek-V4-Pro, point the pricing model at it for a more accurate estimate:
+
+```yaml
+- id: balance-widget
+  name: dsh-balance-widget
+  config:
+    modelId: deepseek-v4-pro
+```
+
+**Note**: the provider has announced that V4-Pro is being retired — from 2026-09-14 12:00 CST, V4-Pro requests are routed to V4.1-Flash and billed at Flash rates. Keeping `deepseek-v4-pro` past that date will over-estimate costs, so the default Flash tier is the better choice.
+
+**Note**: `cordis.patch.yml` may already contain lines for other plugins — append new lines without touching existing ones.
+
+## Pricing
+
+Built-in DeepSeek official peak/off-peak pricing (CNY per 1M tokens), effective 2026-09-10. Peak windows are Beijing time **Mon–Fri (China's statutory holidays excluded)** 09:00–12:00 and 14:00–18:00; **everything else is off-peak**, weekends (including 调休 make-up workdays) and statutory holidays all day included. Peak prices are double the off-peak rates:
+
+| Model | Window | Cache hit (input) | Cache miss (input) | Output |
+| --- | --- | --- | --- | --- |
+| V4.1-Flash | Off-peak | 0.02 | 1.0 | 4.0 |
+| V4.1-Flash | Peak | 0.04 | 2.0 | 8.0 |
+| V4-Pro | Off-peak | 0.15 | 4.5 | 13.5 |
+| V4-Pro | Peak | 0.30 | 9.0 | 27.0 |
+
+The official page currently lists only `deepseek-flash` and `deepseek-v4-pro`; older names (`deepseek-v4-flash`, `deepseek-v4-flash-vision-exp`, `deepseek-chat`) still work and are billed at the Flash rate. The plugin re-parses the page at startup and every 12h, and falls back to the table above only when parsing fails. Costs are **estimates**; the provider's bill is authoritative.
+
+### Search calls (estimated)
+
+Every **query** of a `web_search` call is a separate auxiliary model call (`@deepseek-ai/dsh-web-search-deepseek`, `deepseek-v4-flash` by default, up to `maxUses` per request). The session log records only the pre-dispatch `web/deepseek-search-llm-request` event — **no usage field** — so the real token counts exist in no local file.
+
+The plugin therefore counts requests × a calibrated constant: ~6k cache-miss input + ~2k output tokens per search, i.e. **¥0.014** off-peak and **¥0.028** at peak (calibrated 2026-09-22 against the balance delta: 14 searches measured **¥0.0133 each**). Searches are attributed to the session, workspace and day they belong to, but each amount is an estimate (±30% order).
+
+## Security & permission boundaries
+
+This section is for the DSH Store / plugin audit: dependencies, runtime permissions, external services, and failure bounds.
+
+**Dependencies & compatibility**
+- Zero runtime dependencies: imports no `@deepseek-ai/*` packages; no third-party host deps
+- `peerDependencies["@deepseek-ai/dsh"]`: `>=0.1.2-rc.1 <0.3.0` (DSH compatibility range; 0.1.5 / 0.1.7 / 0.2.0 verified)
+- `engines.node`: `^22.19.0 || >=24.0.0`
+- `peerDependencies["react"]`: `^18.2.0` (browser rendering only)
+
+**Runtime permissions**
+- `files`: reads only `~/.dsh/sessions/` session JSONL (cost stats); never writes or mutates any session file
+- `network`: only the DeepSeek official endpoints — `api.deepseek.com` (`GET /user/balance`, used only when unsigned or on an older host; a signed-in runtime reads the host's `deepseekAccount` service instead, so no plugin request leaves the process) and `api-docs.deepseek.com` pricing page (fetched every 12h); no third-party proxy
+- `commands`: **none**. Session logs are decompressed with Node's built-in zstd (`node:zlib`, needs Node >=22.15), so no `zstd` binary and no `PATH` dependency
+- `credentials`: reads `DEEPSEEK_API_KEY` on the fallback path only (resolved via the host credentials service), used only in the host process behind a loopback-only route guard; the browser never sees the key. A signed-in account reads no key at all
+- All host routes are bound to the loopback address and unreachable externally
+
+**External services**
+- Host account service `deepseekAccount` (DSH 0.2.0+ with a signed-in account; the balance is the official page's own value, truncated to cents the way that page displays it)
+- DeepSeek official balance endpoint `GET /user/balance` (fallback: unsigned or older host; on click / 60s refresh)
+- DeepSeek official pricing page (on startup + every 12h, for peak/off-peak rates)
+
+**Failure bounds**
+- Balance fetch failure: the panel shows the error and keeps the last successful snapshot (no interruption)
+- Pricing fetch failure: falls back to the built-in 2026-09-10 rate table, `pricingSource` marked `default` (`synced` once parsing succeeds)
+- Node without built-in zstd (<22.15), or a session file that yields no frame: returns an actionable error instead of failing silently
+- Missing/corrupt session files: that session is skipped; other sessions are unaffected
+- All costs are estimates; the provider's bill is authoritative
+
+## Changelog
+
+### v0.6.3 — China's statutory holidays are now priced off-peak all day
+- 🐛 **Fixed**: the peak/off-peak check excluded weekends but **not China's statutory holidays**. The official rule is "Beijing time **Mon–Fri (China's statutory holidays excluded)** 09:00–12:00 and 14:00–18:00 are peak; everything else — weekends and statutory holidays all day — is off-peak", so a statutory holiday falling on a weekday was **priced at 2×**. Measured against the built-in 2026 arrangement: Spring Festival 2/18, Dragon Boat 6/19, Mid-Autumn 9/25 and National Day 10/1–10/7 were all mispriced as peak, doubling their cost
+- 📅 **The 2026 statutory holiday table is built in** ([国办发明电〔2025〕7号](https://www.gov.cn/zhengce/zhengceku/202511/content_7047091.htm); **33 days** across New Year, Spring Festival, Qingming, Labour Day, Dragon Boat, Mid-Autumn and National Day — **19 of them on weekdays**, exactly the ones that used to be priced at 2×), matched on the Beijing calendar day. Make-up workdays that fall on a Saturday or Sunday were already off-peak (the official rule lists weekends outright); they are now pinned by tests too
+- 🧪 **Differential verification**: 14 fixture sessions (each with its own fake `$HOME`, driven through the real route, real zstd frames and real pricing) assert ¥1.00 all day on holidays, ¥2.00 inside a normal weekday peak window, and the first working day after a holiday plus the lunch/evening boundaries — **14/14 pass**. Running the same cases against the pre-fix code fails all six holiday cases (¥2.00)
+- ⚠️ **Maintenance note**: the table needs an annual refresh (the State Council publishes the next arrangement, usually in the previous November); years it does not cover fall back to the old weekend-only rule
+- 📄 **Docs**: the pricing section and the peak/off-peak tooltips (both languages) now state "statutory holidays excluded / make-up workdays included" precisely
+
+### v0.6.2 — the balance now prefers the official account service (same source as the settings page, no API key needed)
+- ✨ **The balance is read from the host account service `deepseekAccount` (provided by `@deepseek-ai/dsh-deepseek-account-platform`)** whenever DSH >= 0.2.0 ships it **and a DeepSeek account is signed in**. That service is the official "Settings → Account & balance" page's own source, so the card and the settings page show the same number. Amounts follow the official rule — **positive values are truncated to cents** (`55.6787307800000000` → `55.67`, matching the page) — with the purchased wallet from `value[]`, the granted wallet from `bonusWallets[]`, their sum as the total, and one entry per currency
+- 🚪 **Every fallback is unchanged**: when signed out, when the host has no such service (DSH 0.1.x), or when the account read fails (expired token and friends), the balance comes from the original `GET /user/balance` + `DEEPSEEK_API_KEY`, exactly as in 0.6.1; a failed account read logs one warning saying why
+- 🔑 **Signed in, no key is read at all**: the balance no longer hard-depends on `DEEPSEEK_API_KEY`, so an account-only install still shows a balance
+- 🔎 **Auditable**: the balance response carries a `balanceSource` field (`deepseekAccount` or the fallback path), so it is always clear where a number came from
+- 🧪 **Verified**: a fake cordis ctx drives the **real routes** through 13 assertions — account mapping, multi-currency and bonus summation, cent truncation, signed-out fallback, missing-service fallback, throwing-account fallback with a warning, account winning over an API key, the agent billing tool reading the same source, and a guard that the credential key's spelling is never mistaken for the service name
+- 📏 **Measured same-source** (2026-09-29, after a real restart): the official `account/getBalance` returned `¥55.0685054200000000` while the card showed `¥55.06` — identical to the cent
+
+> **Why this release, said out loud.**
+> After desktop 0.2.0 shipped, the official app put a signed-in balance page under Settings → Account & balance. **That means the platform now recognises the pain point** — people need to see their balance. It just takes several clicks to reach, which for everyday use still loses to a card that sits in the sidebar and reads at a glance.
+>
+> So this release adapts anyway: the balance is read from the official account service, identical to the settings page to the cent, and no API key is needed. But we are not pretending otherwise — now that the platform has taken the need over, **this plugin will be replaced sooner or later**. A little wistful, yet a tool's job is to make itself unnecessary: **we are entering the farewell period.** From here we only keep compatibility maintenance in step with DSH, with no new features. Thanks for letting it watch your balance all this time.
+
+### v0.6.1 — compatibility range widened to DSH 0.2.0 (upgrading would otherwise drop the plugin silently)
+- 🐛 **Fixed**: DSH 0.2.0 adds a plugin compatibility gate (`evaluatePluginCompatibility` in `dsh-app-boot`). It matches every declared `@deepseek-ai/dsh` / `@deepseek-ai/dsh-*` peer range against the running version — **prereleases included** (`semver.satisfies(..., { includePrerelease: true })`) — and a mismatching, non-exempted bundle is **skipped silently at startup** (`loadProfileDirectory` files it under `skippedBundles`: no error, no manifest change). The old declaration `>=0.1.2-rc.1 <0.2.0` happened to cover `0.2.0-rc.1` (which is why the widget works on the current 0.2.0-rc.1 desktop, verified live) but **not 0.2.0 final** — so the first stable-desktop upgrade would have made the sidebar card vanish, with the plugin manager demanding a manual `dsh plugin allow-version` exemption. The range is now `<0.3.0` (verified to cover 0.2.0 / 0.2.1 / 0.3.0-rc.1)
+- ✅ **Live 0.2.0 compatibility check** (against the 0.2.0-rc.1 desktop app, driven in a real browser): all five host routes answer; session logs are still `SESSION_FORMAT_VERSION = 4` and `totalTokens = inputTokens + outputTokens + cacheReadTokens` holds for all 394 usage events (pricing math unchanged); the `sidebar.footer.action` slot, the `dsh.client.platform === "web"` loading gate and the `IconRefreshOutlineRegular` name are all unchanged; every one of the 19 `--dsw-*` tokens the plugin uses still exists (15 of them redefined under `body[data-ds-dark-theme]`, and the popover portalled into `document.body` still inherits the theme); React is still 18.3.1; the 36×36 collapsed-rail button and the popover anchoring behave as before
+- 📦 **Scope**: the compatibility range in `package.json` plus documentation; no runtime code changed
+
+### v0.6.0 — desktop app support, and a UI that matches the desktop shell
+- 🖥️ **Desktop app support (DSH 0.1.7 / DeepSeek Harness.app)**
+  - **Session logs are no longer decompressed by the `zstd` CLI** — Node's built-in zstd (`node:zlib`) does it instead. The desktop app is launched by the GUI, so its PATH is only `/usr/bin:/bin:/usr/sbin:/sbin` and the Homebrew `zstd` is invisible: every cost tier (today's spend, last prompt) failed outright there
+  - **v4 session logs are decoded frame by frame.** The log is append-only: each flush appends its own zstd frame (a measured 726 KB v4 log held 97 of them). Node's one-shot decompressor returns only the first frame (258 B) — and silently dropping 99% of the data is worse than failing. Frames are now located by their magic number; v0 / v3 / v4 logs decode byte-identically to `zstd -dc`
+  - **The refresh glyph is resolved per DSH version.** 0.1.7 renamed product icons to size-neutral weights (`IconRefreshOutlineRegular` plus a `size` prop) and dropped `IconRefreshOutline14`; rendering the missing name as a component throws React #130, and the sidebar slot answers a crashed entry by dropping the whole card — the "card flashes, then vanishes on click" report. The glyph is now resolved from whichever name exists, with a local SVG fallback
+  - **The client inject declaration is empty**: `@deepseek-ai/dsh-client-runtime` was never a real package (absent in both 0.1.5 and 0.1.7); the browser half needs only react and the shell's seed modules
+- 🎨 **Visual alignment with the desktop shell**
+  - Dropped the card's state border (green off-peak / amber peak, which read as "selected") in favour of a 6px status dot before the amount; fill, 12px radius and 14px amount text now use the same design tokens as the desktop's own session rows
+  - The card fills the sidebar column — it used to be flex-shrunk to 131px and overflowed by 8px
+  - **New collapsed-rail state**: in the 56px icon rail the card becomes a 36×36 icon button (matching the rail's other buttons) with the status dot as a badge
+  - **The popover is portalled into `document.body`**: the sidebar column clips its children (`overflow:hidden`), so in the rail the panel was cut off at the sidebar edge. Its width now follows the card (measured at open time, 240px floor) and re-anchors through a `ResizeObserver` while the sidebar or the window is resized
+  - Shadow and focus ring now come from the shell's tokens (`--dsw-shadow-lv3`, `--dsw-focus-ring-*`)
+  - 📄 Docs: both README screenshots regenerated for the new look
+
+### v0.5.5 — README assets now render on the npm package page
+- 🐛 **Fixed**: the screenshots and the language switch used repository-relative paths (`docs/screenshot-corner.png`, `README.en.md`). The npm package page renders the README body only and does not resolve in-repo paths, so both screenshots and the language link were broken on npm. They are now absolute URLs: screenshots via `raw.githubusercontent.com`, the language switch via a GitHub blob link
+- 📦 **Scope**: documentation only; no code change
+
+### v0.5.4 — search calls are now counted (previously dropped entirely)
+- 🐛 **Fixed**: the auxiliary model calls behind `web_search` contributed nothing to cost. DSH writes only a pre-dispatch `web/deepseek-search-llm-request` event per search (no usage), so any log-derived pricing undercounts systematically — measured 2026-09-22: all 1073 searches of the day were missing. Searches are now priced as requests × a calibrated constant and attributed to their session / workspace / day and turn
+- 📏 **Calibration**: ~6k cache-miss input + ~2k output tokens per search (¥0.014 off-peak, ¥0.028 at peak). Measured 2026-09-22 from the balance delta: 14 searches in one window, balance delta ¥0.28, minus ¥0.094 of log-derivable conversation cost → **¥0.0133 per search**
+- ⚠️ **Scope**: the search portion is an estimate (±30% order); conversation text is still priced exactly from the logs
+
+### v0.5.3 — weekends no longer mispriced as peak
+- 🐛 **Fixed**: the peak/off-peak check looked only at the hour and ignored the weekday, so weekends were priced as peak (2×) during 09:00–12:00 and 14:00–18:00, up to doubling "today's cost". The official rule is **Mon–Fri** 09:00–12:00 and 14:00–18:00 (everything else, weekends included, is off-peak); Saturday and Sunday are now excluded first, using the Beijing-time weekday
+- 📄 **Docs**: the pricing section and the peak/off-peak tooltips now state the Mon–Fri restriction
+
+### v0.5.2 — DSH 0.1.5: new session format & new pricing page
+- 🐛 **Fixed**: DSH 0.1.5 writes session logs under a generation-tagged name (`session.v3.jsonl.zstd`), but the plugin only matched `session.jsonl.zstd`, so every session created after the upgrade was invisible — viewing one produced red error text in the popover, and today's cost was understated (measured ~36% low). Logs are now found by taking the highest generation per session directory; a migrated session's older file is a subset of the new one, so reading only the newest avoids double-counting the session
+- 🐛 **Fixed**: the official pricing page renamed the Flash column to `deepseek-flash` and cut its rates. The parser's model-id anchor landed on a page footnote, so the sync reported success while silently keeping the stale, higher rates — overstating costs by ~1.7x. The parser now anchors on the table's row labels and applies that column to every Flash-family name
+- 💰 **Rates**: the built-in fallback table now carries V4.1-Flash pricing (off-peak 0.02 / 1.0 / 4.0, peak 0.04 / 2.0 / 8.0 CNY per 1M tokens); the V4-Pro tier is unchanged
+- 📄 **Docs**: corrected the `pricingSource` values to `default` / `synced` (previously misdocumented as `builtin`)
+
+### v0.5.1 — Cold-start speedup & cleanup
+- 🚀 **Performance**: today-cost cold start dropped from ~5.4s to ~0.01s — only session files modified today are decompressed (mtime filter), parsed results are cached by (path, mtime), and parsing runs in parallel
+- ⏰ **Refresh wording**: README now matches the code — the persistent card auto-refreshes every 60s (the old "no polling" claims contradicted the code and have been corrected)
+- 🌏 **Timezone fix**: peak/off-peak windows are now computed in Beijing time (UTC+8) explicitly instead of the host's local timezone
+- 🧹 **Cleanup**: removed a dead client-side pricing stack (PRICING/priceSession) that was never called; all pricing now goes through the host
+- 📐 **Pricing parsing hardened**: peak rates are parsed explicitly from the official page (no more hard-coded "off-peak × 2"); if a cache-hit rate cannot be parsed the whole table falls back to built-in rates instead of silently pricing cache hits at 0
+- 🏷️ **Card label**: the card footer now reads "Today · all" to make clear it is the global (all-workspaces) figure
+- 🎨 **Visual refresh**: SVG wallet icon replaces 💰, press/pop micro-animations, muted secondary tiers in the popover
+
+### v0.5.0 — Five-tier costs & peak/off-peak status
+- ✨ **Added**: the cost breakdown is now five tiers — balance / last prompt / today-this-session / today-this-workspace / today-all-workspaces
+  - The last-prompt row labels the **session name** underneath (based on the most recent session)
+  - "Today · this session" = the current session's usage today; "Today · this workspace" = all sessions in the current workspace today (workspace anchored by the current session); "Today · all workspaces" = everything across all workspaces today
+- ✨ **Added**: peak/off-peak status visuals — card and popover borders tinted by window (orange at peak / green at off-peak), a "Peak/Off-peak" tag next to the popover title with a hover tooltip showing the current price tier
+- 🎨 **Changed**: removed the remaining-ratio bar; the balance number is now color-coded directly by threshold (healthy / amber / red)
+- 🗑️ **Removed**: the "This session" row (all-time session total) from the popover
+
+### v0.2.0 — Last prompt & today total cost
+- ✨ **Added**: popover now shows "last prompt cost" and "today total cost"
+  - Last prompt: prices the current session's last turn from the session file
+  - Today total: walks every session under `~/.dsh/sessions/` and sums today's usage
+- 🐛 **Fixed**: session-id prefix duplication in the last-cost route (both `session-`-prefixed and bare ids resolve)
+
+### v0.1.0 — Initial release
+- 🎉 Account balance (official `/user/balance`) + session cost (estimate) + token usage
+- On-demand refresh: no polling, queries only on click, costs zero tokens
+
+## Verify
+
+- Config tree: `dsh --profile web --dump-config` should show a `balance-widget` entry.
+- Balance route: after restarting dsh web, `curl -s http://127.0.0.1:3080/api/dsh-balance/balance` should return `{ ok, balance_infos, modelId }`.
+- Session costs: `curl -s http://127.0.0.1:3080/api/dsh-balance/active-cost` should return `{ lastPrompt, todaySession, title, sessionId, peak, workspaceName, ... }`; append `?session=SESSION_ID` to target a specific session.
+- Today costs: `curl -s http://127.0.0.1:3080/api/dsh-balance/today-cost` should return `{ workspace: { cost, ..., cwd }, all: { cost, ... }, modelId }`.
+- Legacy route: `curl -s "http://127.0.0.1:3080/api/dsh-balance/last-cost?session=SESSION_ID"` still works and returns `{ cost, inputTokens, outputTokens, modelId }`.
+
+## License
+
+MIT

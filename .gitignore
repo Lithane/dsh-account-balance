@@ -1,0 +1,11 @@
+node_modules/
+*.bak
+*.log
+.DS_Store
+Thumbs.db
+
+# npm pack 生成的 tarball（勿提交包快照）
+*.tgz
+
+# 项目级 npm 配置，可能含 registry token
+.npmrc

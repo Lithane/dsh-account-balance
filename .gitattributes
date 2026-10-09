@@ -1,0 +1,6 @@
+# 行尾统一：仓库存储与工作区检出都用 LF。规则跟仓库走，不依赖
+# 各人本机的 core.autocrlf（本机 system 级为 true，Windows 默认）。
+* text=auto eol=lf
+
+# 上游归档截图按二进制处理：不做任何文本转换，也不参与文本 diff。
+*.png binary

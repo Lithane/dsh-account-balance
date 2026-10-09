@@ -1,0 +1,71 @@
+{
+  "name": "@lithane/dsh-account-balance",
+  "description": "DeepSeek Harness 侧栏底部的账户余额与花费卡片：常驻显示账户余额与今日花费，点击展开五层级成本明细（最近提问 / 今日·本会话 / 本工作区 / 所有工作区），含峰谷时段状态与一键充值入口。",
+  "version": "0.1.1",
+  "type": "module",
+  "main": "lib/index.js",
+  "files": [
+    "lib",
+    "docs",
+    "cordis.patch.yml",
+    "README.md",
+    "CHANGELOG.md",
+    "LICENSE"
+  ],
+  "exports": {
+    ".": {
+      "default": "./lib/index.js"
+    },
+    "./client": {
+      "default": "./lib/client.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [],
+      "platform": "web"
+    }
+  },
+  "peerDependencies": {
+    "react": "^18.2.0",
+    "@deepseek-ai/dsh": ">=0.1.2-rc.1 <0.3.0"
+  },
+  "keywords": [
+    "deepseek",
+    "dsh",
+    "deepseek-harness",
+    "dsh-plugin",
+    "plugin",
+    "balance",
+    "account-balance",
+    "cost",
+    "token",
+    "web-ui"
+  ],
+  "license": "MIT",
+  "author": "Li Yi <thliyi@live.com>",
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Lithane/dsh-account-balance.git"
+  },
+  "homepage": "https://github.com/Lithane/dsh-account-balance#readme",
+  "bugs": {
+    "url": "https://github.com/Lithane/dsh-account-balance/issues"
+  },
+  "scripts": {
+    "verify": "node --check lib/index.js && node --check lib/client.js",
+    "pack:check": "npm pack --dry-run",
+    "prepublishOnly": "npm run verify"
+  },
+  "engines": {
+    "node": "^22.15.0 || >=24.0.0"
+  },
+  "packageManager": "pnpm@11.7.0"
+}
